@@ -41,3 +41,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: 'Server Error' }, { status: 500 });
   }
 }
+
+// Vercel 연결 테스트용 주석
