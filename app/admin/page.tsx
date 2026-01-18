@@ -482,29 +482,144 @@ export default function AdminDashboard() {
         ))}
       </nav>
 
-      {/* 상세보기 모달 (홈 탭용) */}
+      {/* 🟢 모달 (상세보기) - 홈 탭용 */}
       {viewDetailItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewDetailItem(null)}></div>
-          <div className="relative bg-white w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-3xl shadow-2xl p-8 animate-fade-in text-black">
-            <div className="flex justify-between items-start mb-6 border-b pb-4">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 font-sans">{viewDetailItem.app_title || '상세 보기'}</h3>
-                <p className="text-sm text-gray-500 font-sans">{viewDetailItem.respondent_name}님의 제안</p>
-              </div>
-              <button onClick={() => setViewDetailItem(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><X className="w-5 h-5 text-gray-500" /></button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 fade-in-modal">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setViewDetailItem(null)}></div>
+          <div className="relative bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-scale-in text-black">
+            {/* 모달 헤더 */}
+            <div className="sticky top-0 bg-white/95 backdrop-blur border-b z-10 px-6 py-4 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-gray-900 truncate pr-4">{viewDetailItem.app_title || "상세 정보"}</h3>
+              <button onClick={() => setViewDetailItem(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition">
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
             </div>
-            <div className="space-y-6 text-sm font-sans">
-              <div><p className="font-bold text-gray-400 text-xs uppercase mb-2">Pain Point</p><div className="bg-gray-50 p-4 rounded-xl leading-relaxed whitespace-pre-wrap border">{viewDetailItem.pain_point}</div></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-gray-50 rounded border"><p className="text-xs text-gray-400 mb-1">이메일</p><p className="font-medium truncate">{viewDetailItem.respondent_email}</p></div>
-                <div className="p-3 bg-gray-50 rounded border"><p className="text-xs text-gray-400 mb-1">연락처</p><p className="font-medium">{viewDetailItem.respondent_phone || '-'}</p></div>
-              </div>
-              {viewDetailItem.admin_reply_memo && (
-                <div className="bg-green-50 p-4 rounded-xl border border-green-100"><p className="font-bold text-green-700 mb-1">✅ 관리자 피드백 완료</p><p className="text-green-800 line-clamp-3 leading-relaxed">{viewDetailItem.admin_reply_memo}</p></div>
-              )}
+
+            {/* 모달 컨텐츠 */}
+            <div className="p-6 space-y-8">
+              {/* 1. 기본 정보 */}
+              <section>
+                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">참가자 정보</h4>
+                <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                  <div>
+                    <span className="block text-gray-500 mb-1">이름</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.respondent_name || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">나이대</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.age_group || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">이메일</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.respondent_email || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">연락처</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.respondent_phone || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">IT 지식 수준</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.it_knowledge || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">직업 상태</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.job_status || '-'}</span>
+                  </div>
+                </div>
+              </section>
+
+              <div className="h-px bg-gray-100"></div>
+
+              {/* 2. 앱 아이디어 */}
+              <section>
+                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">앱 아이디어 상세</h4>
+                <div className="space-y-6">
+                  <div>
+                    <span className="block text-gray-500 mb-2 font-medium">불편한 점 (Pain Point)</span>
+                    <div className="bg-gray-50 p-4 rounded-xl text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
+                      {viewDetailItem.pain_point || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-2 font-medium">원하는 솔루션</span>
+                    <div className="bg-gray-50 p-4 rounded-xl text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
+                      {viewDetailItem.solution_wish || '-'}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-2 font-medium">자동화 희망 부분</span>
+                    <div className="bg-gray-50 p-4 rounded-xl text-gray-800 leading-relaxed whitespace-pre-wrap text-sm">
+                      {viewDetailItem.automation_wish || '-'}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="h-px bg-gray-100"></div>
+
+              {/* 3. 기타 정보 */}
+              <section>
+                <div className="grid grid-cols-1 gap-y-4 text-sm">
+                  <div>
+                    <span className="block text-gray-500 mb-1">주 사용 기기</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.device_usage || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">추가 요청사항</span>
+                    <span className="text-gray-900">{viewDetailItem.extra_request || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">레퍼런스 URL</span>
+                    {viewDetailItem.reference_url ? (
+                      <a href={viewDetailItem.reference_url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all">
+                        {viewDetailItem.reference_url}
+                      </a>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="block text-gray-500 mb-1">선호하는 연락 방법</span>
+                    <span className="font-medium text-gray-900">{viewDetailItem.contact_method || '-'}</span>
+                  </div>
+                </div>
+              </section>
+
+              <div className="h-px bg-gray-100"></div>
+
+              {/* 4. 피드백 / 답변 */}
+              <section>
+                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">관리자 피드백</h4>
+                {viewDetailItem.admin_reply_memo && (
+                  <div className="bg-green-50 border border-green-100 p-4 rounded-xl mb-6">
+                    <span className="block text-green-700 font-bold text-xs uppercase mb-2">✅ 답변 완료됨</span>
+                    <div className="text-sm text-green-900 whitespace-pre-wrap">
+                      {viewDetailItem.admin_reply_memo}
+                    </div>
+                  </div>
+                )}
+                <div className="bg-gray-50 p-6 rounded-xl border border-gray-100">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Mail className="w-5 h-5 text-gray-500" />
+                    <span className="font-bold text-gray-700">답변 메일 보내기</span>
+                  </div>
+                  <div className="space-y-3">
+                    <input type="text" value={viewDetailItem.respondent_email || ''} disabled className="w-full p-3 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm" />
+                    <input type="text" value={replySubject} onChange={e => setReplySubject(e.target.value)} placeholder="제목을 입력하세요" className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                    <textarea rows={5} value={replyBody} onChange={e => setReplyBody(e.target.value)} placeholder="답변 내용을 작성하세요..." className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
+                    <button onClick={handleSendEmail} disabled={isSending} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-sm">
+                      {isSending ? '전송 중...' : '발송 및 완료 처리 🚀'}
+                    </button>
+                  </div>
+                </div>
+              </section>
             </div>
-            <button onClick={() => { setViewDetailItem(null); setActiveTab('feedback'); setSelectedItem(viewDetailItem); setReplySubject(`[답변] ${viewDetailItem.app_title} 피드백`); }} className="w-full mt-8 bg-black text-white py-4 rounded-xl font-bold shadow-lg transition-transform active:scale-95 font-sans">피드백 작성하러 가기</button>
+
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button onClick={() => setViewDetailItem(null)} className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50 transition">
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
