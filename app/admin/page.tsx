@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { supabase } from '@/lib/supabase';
+// import { supabase } from '@/lib/supabase'; // Removed Supabase
 import { RefreshCw, Search, Users, Home, PlusCircle, MessageSquare, Lock, X, ChevronRight, Mail, ChevronLeft } from "lucide-react";
+
+const GOOGLE_SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
 export default function AdminDashboard() {
   // 🔐 [보안] 로그인 상태 관리
@@ -40,16 +43,51 @@ export default function AdminDashboard() {
   const ITEMS_PER_PAGE_PARTICIPANTS = 10;
 
   const fetchData = async () => {
-    setLoading(true);
-    const { data: result, error } = await supabase
-      .from('survey_results')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && result) {
-      setData(result);
+    if (!GOOGLE_SHEET_ID || !GOOGLE_API_KEY) {
+      alert("Google Sheets 환경변수가 설정되지 않았습니다.");
+      return;
     }
-    setLoading(false);
+
+    setLoading(true);
+    try {
+      const url = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/Tally_raw!A:X?key=${GOOGLE_API_KEY}`;
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (json.values && json.values.length > 1) {
+        // 첫 번째 행은 헤더로 가정하고 2번째 행부터 데이터 매핑
+        // Tally 컬럼 순서나 시트 구조에 따라 인덱스를 조정해야 할 수 있습니다.
+        // 현재 매핑은 임의의 순서로 가정됨: A=0, B=1, ...
+        const mappedData = json.values.slice(1).map((row: string[], index: number) => ({
+          id: row[0] || `sheet-row-${index}`, // A열: ID (없으면 인덱스)
+          created_at: row[1] || new Date().toISOString(), // B열: 제출일
+          respondent_name: row[2] || "익명", // C열: 이름
+          respondent_email: row[3] || "", // D열: 이메일
+          respondent_phone: row[4] || "", // E열: 전화번호
+          app_title: row[5] || "제목 없음", // F열: 앱 제목
+          pain_point: row[6] || "", // G열: 불편한 점
+          solution_wish: row[7] || "", // H열: 해결방안
+          automation_wish: row[8] || "", // I열: 자동화 희망
+          it_knowledge: row[9] || "", // J열: IT 지식
+          job_status: row[10] || "", // K열: 직업
+          age_group: row[11] || "", // L열: 나이
+          device_usage: row[12] || "", // M열: 기기
+          extra_request: row[13] || "", // N열: 추가 요청
+          reference_url: row[14] || "", // O열: 레퍼런스
+          contact_method: row[15] || "", // P열: 연락 방법
+          admin_reply_memo: row[16] || null // Q열: 답변 메모 (수동 기입 가정)
+        })).sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+        
+        setData(mappedData);
+      } else {
+        setData([]);
+      }
+    } catch (err) {
+      console.error("Google Sheet Load Error:", err);
+      alert("구글 시트 데이터를 불러오는데 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -86,14 +124,21 @@ export default function AdminDashboard() {
       const result = await res.json();
       if (result.success) {
         const newMemo = `[${new Date().toLocaleDateString()} 발송] 제목: ${replySubject}\n내용: ${replyBody}\n----------------\n${targetItem.admin_reply_memo || ''}`;
-        const { error } = await supabase.from('survey_results').update({ admin_reply_memo: newMemo }).eq('id', targetItem.id);
-        if (!error) {
-          alert("성공! 메일이 발송되고 기록이 저장되었습니다. 💾");
-          setReplyBody("");
-          fetchData();
-          if (viewDetailItem) setViewDetailItem({ ...viewDetailItem, admin_reply_memo: newMemo });
-          setSelectedItem(null);
+        
+        // ⚠️ Google Sheets API Key는 Read-Only이므로 쓰기 작업 불가
+        // 로컬 상태만 업데이트하여 UI에 반영합니다.
+        alert("성공! 메일이 발송되었습니다. 💾\n(참고: 구글 시트에는 저장되지 않으므로 시트에 직접 '답변 완료' 표시를 해주세요.)");
+        
+        setData(prevData => prevData.map(item => 
+          item.id === targetItem.id ? { ...item, admin_reply_memo: newMemo } : item
+        ));
+        
+        if (viewDetailItem && viewDetailItem.id === targetItem.id) {
+          setViewDetailItem({ ...targetItem, admin_reply_memo: newMemo });
         }
+        
+        setReplyBody("");
+        setSelectedItem(null);
       } else {
         alert("메일 발송 실패: " + result.message);
       }
