@@ -4,7 +4,7 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Insight Canvas",
+  title: "썬칩샘 앱 수요조사 설문",
   description: "Student App Demand Dashboard - Transform feedback into actionable insights",
   generator: "v0.app",
 }
