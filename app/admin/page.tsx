@@ -60,7 +60,7 @@ export default function AdminDashboard() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === "jasonyim2024") {
+    if (passwordInput.trim() === "jasonyim2024") {
       setIsAuthenticated(true);
     } else {
       alert("비밀번호가 틀렸습니다.");
