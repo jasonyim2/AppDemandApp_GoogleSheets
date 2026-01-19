@@ -35,7 +35,7 @@ export default function LandingPage() {
       <div className="flex justify-center w-full">
         {/* 소비자용: Tally 설문 버튼 */}
         <a
-          href="https://tally.so/r/zxMZg8"
+          href="https://tally.so/r/zxMBgM"
           target="_blank"
           rel="noopener noreferrer"
           className="bg-blue-600 text-white font-bold py-4 px-12 rounded-xl hover:bg-blue-700 transition shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex justify-center items-center w-full max-w-sm whitespace-nowrap"

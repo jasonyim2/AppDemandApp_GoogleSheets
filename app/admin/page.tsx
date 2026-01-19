@@ -612,7 +612,7 @@ export default function AdminDashboard() {
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center py-24 animate-fade-in text-black">
               <h2 className="text-2xl font-bold mb-4 font-sans">📝 설문 등록 페이지</h2>
               <p className="text-gray-500 mb-8 px-10 font-sans leading-relaxed">새로운 앱 수요를 등록하시려면<br />아래 버튼을 눌러 Tally 설문지로 이동하세요.</p>
-              <a href="https://tally.so/r/zxMZg8" target="_blank" rel="noreferrer" className="inline-block bg-black text-white px-8 py-4 rounded-xl font-bold hover:bg-gray-800 transition shadow-lg font-sans">설문 작성하러 가기 →</a>
+              <a href="https://tally.so/r/zxMBgM" target="_blank" rel="noreferrer" className="inline-block bg-black text-white px-8 py-4 rounded-xl font-bold hover:bg-gray-800 transition shadow-lg font-sans">설문 작성하러 가기 →</a>
             </div>
           )
         }
