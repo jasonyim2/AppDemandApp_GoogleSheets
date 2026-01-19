@@ -4,30 +4,34 @@ import { google } from 'googleapis';
 
 export async function POST(request: Request) {
   try {
-    const { id, to, subject, text } = await request.json();
+    const { id, to, subject, text, mode } = await request.json();
 
-    // 1. 이메일 전송 (Nodemailer)
-    if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
-      console.error('환경 변수(GMAIL_USER, GMAIL_PASS)가 없습니다!');
-      return NextResponse.json({ success: false, message: '서버 설정 오류 (Email)' }, { status: 500 });
+    // 1. 이메일 전송 (Nodemailer) - mode가 'hold'가 아닐 때만 발송
+    if (mode !== 'hold') {
+      if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
+        console.error('환경 변수(GMAIL_USER, GMAIL_PASS)가 없습니다!');
+        return NextResponse.json({ success: false, message: '서버 설정 오류 (Email)' }, { status: 500 });
+      }
+
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.GMAIL_USER,
+          pass: process.env.GMAIL_PASS,
+        },
+      });
+
+      const mailOptions = {
+        from: process.env.GMAIL_USER,
+        to: to,
+        subject: subject,
+        text: text,
+      };
+
+      await transporter.sendMail(mailOptions);
+    } else {
+      console.log(`[API Log] Mode is 'hold'. Skipping email for ID: ${id}`);
     }
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
-      },
-    });
-
-    const mailOptions = {
-      from: process.env.GMAIL_USER,
-      to: to,
-      subject: subject,
-      text: text,
-    };
-
-    await transporter.sendMail(mailOptions);
 
     // 2. 구글 시트 업데이트 (Google Sheets API)
     // 환경변수 확인
@@ -77,7 +81,19 @@ export async function POST(request: Request) {
 
           // 새 메모 포맷팅 (기존 메모 하단에 추가)
           const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-          const newFullMemo = `[${nowStr} 발송] ${subject}\n${text}\n----------------\n${oldMemo}`;
+
+          let newFullMemo = '';
+          let newStatus = 'Y';
+
+          if (mode === 'hold') {
+            // 보류 모드
+            newFullMemo = `[${nowStr} 보류] ${subject}\n${text}\n----------------\n${oldMemo}`;
+            newStatus = 'L'; // 답변 보류
+          } else {
+            // 일반 발송 모드
+            newFullMemo = `[${nowStr} 발송] ${subject}\n${text}\n----------------\n${oldMemo}`;
+            newStatus = 'Y'; // 답변 완료
+          }
 
           // V(답변내용), W(답변상태), X(답변일시) 업데이트
           await sheets.spreadsheets.values.update({
@@ -85,10 +101,10 @@ export async function POST(request: Request) {
             range: `Tally_raw!V${realRowNumber}:X${realRowNumber}`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
-              values: [[newFullMemo, 'Y', nowStr]],
+              values: [[newFullMemo, newStatus, nowStr]],
             },
           });
-          console.log(`Google Sheet Updated for ID: ${id} at Row: ${realRowNumber}`);
+          console.log(`Google Sheet Updated for ID: ${id} at Row: ${realRowNumber} with Status: ${newStatus}`);
         } else {
           console.warn(`ID not found in Sheet: ${id}`);
         }
@@ -100,10 +116,14 @@ export async function POST(request: Request) {
       console.warn('Google Sheet Env Vars missing or ID not provided. Skipping Sheet Update.');
     }
 
+    // 모드에 따라 메시지 다르게 반환
+    if (mode === 'hold') {
+      return NextResponse.json({ success: true, message: '보류 처리 완료' });
+    }
     return NextResponse.json({ success: true, message: '전송 성공' });
 
   } catch (error: any) {
-    console.error('이메일 전송 상세 에러:', error);
-    return NextResponse.json({ success: false, message: '전송 실패: ' + error.message }, { status: 500 });
+    console.error('API 상세 에러:', error);
+    return NextResponse.json({ success: false, message: '실패: ' + error.message }, { status: 500 });
   }
 }

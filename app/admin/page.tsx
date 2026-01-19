@@ -73,7 +73,8 @@ export default function AdminDashboard() {
           extra_request: row[18] || "",     // S열: 추가요청
           reference_url: row[19] || "",     // T열: 레퍼런스
           contact_method: row[20] || "",    // U열: 회신방법
-          admin_reply_memo: row[21] || null // V열: 답변내용
+          admin_reply_memo: row[21] || null, // V열: 답변내용
+          reply_status: row[22] || "",      // W열: 답변상태 (Y:완료, L:보류, 빈칸:대기)
         }));
 
         // 날짜 내림차순 정렬 (최신순)
@@ -104,7 +105,12 @@ export default function AdminDashboard() {
     }
   };
 
+  // 이메일 발송 핸들러
   const handleSendEmail = async () => {
+    if (replySubject.trim() === "" || replyBody.trim() === "") {
+      alert("제목과 내용을 입력해주세요.");
+      return;
+    }
     if (!confirm("정말 이메일을 발송하시겠습니까?")) return;
     setIsSending(true);
     const targetItem = viewDetailItem || selectedItem;
@@ -118,6 +124,7 @@ export default function AdminDashboard() {
           to: targetItem.respondent_email,
           subject: replySubject,
           text: replyBody
+          // mode 생략 시 기본값: normal (이메일 발송 + 시트 'Y')
         })
       });
       const result = await res.json();
@@ -125,21 +132,63 @@ export default function AdminDashboard() {
         alert("성공! 이메일이 발송되었습니다.\n(참고: 시트 업데이트는 잠시 후 반영될 수 있습니다.)");
         setReplyBody("");
 
-        // 로컬 상태 즉시 업데이트 (사용자 경험 향상)
+        // 로컬 상태 즉시 업데이트 (사용자 경험 향상) - 'Y' 상태 반영
         const newMemo = `[${new Date().toLocaleDateString()} 발송] ${replySubject}\n${replyBody}\n----------------\n${targetItem.admin_reply_memo || ''}`;
-        const updatedItem = { ...targetItem, admin_reply_memo: newMemo };
+        const updatedItem = { ...targetItem, admin_reply_memo: newMemo, reply_status: 'Y' };
 
         // 데이터 목록 업데이트
         setData(prev => prev.map(item => item.id === targetItem.id ? updatedItem : item));
         if (selectedItem?.id === targetItem.id) setSelectedItem(updatedItem);
         if (viewDetailItem?.id === targetItem.id) setViewDetailItem(updatedItem);
-
-        // setViewDetailItem(null); // (선택사항: 완료 후 닫기)
       } else {
         alert("메일 발송 실패: " + result.message);
       }
     } catch (err) {
       alert("오류 발생: " + err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  // [신규 기능] 답변 보류 (L) 핸들러
+  const handleHold = async () => {
+    if (!confirm("이메일을 보내지 않고 '답변 보류(L)' 상태로 변경하시겠습니까?")) return;
+
+    // 보류의 경우 제목/내용이 비어있어도 처리 가능하도록 유연하게 (필요 시 주석 해제)
+    // if (replySubject.trim() === "") { alert("보류 사유를 제목에 간단히 적어주세요."); return; }
+
+    setIsSending(true);
+    const targetItem = viewDetailItem || selectedItem;
+
+    try {
+      const res = await fetch('/api/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: targetItem.id,
+          to: targetItem.respondent_email,
+          subject: replySubject || "답변 보류", // 제목이 없으면 기본값
+          text: replyBody || "(보류 처리됨)",     // 내용이 없으면 기본값
+          mode: 'hold' // ★ 보류 모드
+        })
+      });
+      const result = await res.json();
+      if (result.success) {
+        alert("처리 완료! '답변 보류(L)' 상태로 저장되었습니다.");
+
+        // 로컬 상태 업데이트 (L)
+        // 보류여도 메모에 기록을 남길지 여부는 선택사항이나, 기록을 남기는 것이 헷갈리지 않음
+        const holdNote = `[${new Date().toLocaleDateString()} 보류] ${replySubject}\n${replyBody}\n----------------\n${targetItem.admin_reply_memo || ''}`;
+        const updatedItem = { ...targetItem, admin_reply_memo: holdNote, reply_status: 'L' };
+
+        setData(prev => prev.map(item => item.id === targetItem.id ? updatedItem : item));
+        if (selectedItem?.id === targetItem.id) setSelectedItem(updatedItem);
+        if (viewDetailItem?.id === targetItem.id) setViewDetailItem(updatedItem);
+      } else {
+        alert("처리 실패: " + result.message);
+      }
+    } catch (err) {
+      alert("통신 오류: " + err);
     } finally {
       setIsSending(false);
     }
@@ -168,6 +217,17 @@ export default function AdminDashboard() {
         <button onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-20"><ChevronRight className="w-5 h-5 text-gray-600" /></button>
       </div>
     );
+  };
+
+  // 상태 뱃지 렌더링 헬퍼
+  const StatusBadge = ({ item }: { item: any }) => {
+    if (item.reply_status === 'Y' || (item.admin_reply_memo && item.reply_status !== 'L')) {
+      return <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">답변완료</span>;
+    }
+    if (item.reply_status === 'L') {
+      return <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded-full">보류</span>;
+    }
+    return <span className="bg-orange-100 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full">대기중</span>;
   };
 
   if (!isAuthenticated) {
@@ -209,7 +269,8 @@ export default function AdminDashboard() {
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-500 mb-1">피드백 대기</h3>
-                <p className="text-3xl font-bold text-orange-600">{data.filter(i => !i.admin_reply_memo).length}건</p>
+                {/* 대기 건수 계산 시 보류(L)는 제외하거나 포함할 수 있음 -> 'Y'가 아닌 것 중 'L'도 아닌 것만 대기로 간주 */}
+                <p className="text-3xl font-bold text-orange-600">{data.filter(i => (!i.admin_reply_memo && i.reply_status !== 'L') || (i.reply_status !== 'Y' && i.reply_status !== 'L')).length}건</p>
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-500 mb-1">최근 접수</h3>
@@ -230,8 +291,10 @@ export default function AdminDashboard() {
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 {(() => {
                   const filteredData = data.filter(item => {
-                    if (homeFilter === 'completed') return item.admin_reply_memo;
-                    if (homeFilter === 'pending') return !item.admin_reply_memo;
+                    const isCompleted = item.reply_status === 'Y' || (item.admin_reply_memo && item.reply_status !== 'L');
+                    if (homeFilter === 'completed') return isCompleted;
+                    if (homeFilter === 'pending') return !isCompleted && item.reply_status !== 'L'; // 보류는 대기에서 제외? 혹은 포함? (일단 보류는 별도 취급하거나 완료 취급 X)
+                    // 현재 필터가 단순해서 보류는 '전체'에서만 보일 수도 있음.
                     return true;
                   });
                   const paginatedData = filteredData.slice((homePage - 1) * ITEMS_PER_PAGE_HOME, homePage * ITEMS_PER_PAGE_HOME);
@@ -243,14 +306,14 @@ export default function AdminDashboard() {
                           <div className="flex-1 min-w-0 pr-4">
                             <div className="flex items-center gap-2 mb-1">
                               <p className="font-semibold text-gray-900 truncate">{item.app_title || '제목 없음'}</p>
-                              {item.admin_reply_memo && <span className="w-2 h-2 rounded-full bg-green-500"></span>}
+                              {/* 상태 점 표시 */}
+                              {item.reply_status === 'Y' && <span className="w-2 h-2 rounded-full bg-green-500"></span>}
+                              {item.reply_status === 'L' && <span className="w-2 h-2 rounded-full bg-gray-400"></span>}
                             </div>
                             <p className="text-sm text-gray-500">{item.respondent_name} · {item.created_at}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.admin_reply_memo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
-                              {item.admin_reply_memo ? '답변완료' : '대기중'}
-                            </span>
+                            <StatusBadge item={item} />
                             <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-400" />
                           </div>
                         </div>
@@ -280,8 +343,9 @@ export default function AdminDashboard() {
 
                 {(() => {
                   const filteredFeedback = data.filter(item => {
-                    if (feedbackFilter === 'completed') return item.admin_reply_memo;
-                    if (feedbackFilter === 'pending') return !item.admin_reply_memo;
+                    const isCompleted = item.reply_status === 'Y' || (item.admin_reply_memo && item.reply_status !== 'L');
+                    if (feedbackFilter === 'completed') return isCompleted;
+                    if (feedbackFilter === 'pending') return !isCompleted && item.reply_status !== 'L';
                     return true;
                   });
                   const paginatedFeedback = filteredFeedback.slice((feedbackPage - 1) * ITEMS_PER_PAGE_FEEDBACK, feedbackPage * ITEMS_PER_PAGE_FEEDBACK);
@@ -296,9 +360,15 @@ export default function AdminDashboard() {
                             <span className="text-xs text-gray-400 font-sans">{item.created_at}</span>
                           </div>
                           <p className="text-sm text-gray-500 mb-4">{item.respondent_name} ({item.respondent_email})</p>
-                          {item.admin_reply_memo ? (
+
+                          {/* 상태별 UI 분기 */}
+                          {item.reply_status === 'Y' || (item.admin_reply_memo && item.reply_status !== 'L') ? (
                             <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm border border-green-100 flex items-start gap-2 font-sans">
                               <span className="mt-0.5">✅</span><span className="line-clamp-2">{item.admin_reply_memo}</span>
+                            </div>
+                          ) : item.reply_status === 'L' ? (
+                            <div className="bg-gray-100 text-gray-600 p-3 rounded-lg text-sm border border-gray-200 flex items-start gap-2 font-sans">
+                              <span className="mt-0.5">⏸️</span><span className="line-clamp-2">{item.admin_reply_memo || '(보류됨)'}</span>
                             </div>
                           ) : (
                             <div className="bg-orange-50 text-orange-600 p-3 rounded-lg text-sm border border-orange-100 flex items-center gap-2">
@@ -411,9 +481,11 @@ export default function AdminDashboard() {
                 <section>
                   <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">관리자 피드백</h4>
                   {selectedItem.admin_reply_memo && (
-                    <div className="bg-green-50 border border-green-100 p-4 rounded-xl mb-6">
-                      <span className="block text-green-700 font-bold text-xs uppercase mb-2">✅ 답변 완료됨</span>
-                      <div className="text-sm text-green-900 whitespace-pre-wrap">
+                    <div className={`p-4 rounded-xl mb-6 border ${selectedItem.reply_status === 'L' ? 'bg-gray-50 border-gray-200' : 'bg-green-50 border-green-100'}`}>
+                      <span className={`block font-bold text-xs uppercase mb-2 ${selectedItem.reply_status === 'L' ? 'text-gray-600' : 'text-green-700'}`}>
+                        {selectedItem.reply_status === 'L' ? '⏸️ 보류 처리됨' : '✅ 답변 완료됨'}
+                      </span>
+                      <div className={`text-sm whitespace-pre-wrap ${selectedItem.reply_status === 'L' ? 'text-gray-800' : 'text-green-900'}`}>
                         {selectedItem.admin_reply_memo}
                       </div>
                     </div>
@@ -427,9 +499,16 @@ export default function AdminDashboard() {
                       <input type="text" value={selectedItem.respondent_email || ''} disabled className="w-full p-3 bg-white border border-gray-200 rounded-xl text-gray-500 text-sm" />
                       <input type="text" value={replySubject} onChange={e => setReplySubject(e.target.value)} placeholder="제목을 입력하세요" className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                       <textarea rows={5} value={replyBody} onChange={e => setReplyBody(e.target.value)} placeholder="답변 내용을 작성하세요..." className="w-full p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
-                      <button onClick={handleSendEmail} disabled={isSending} className="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-sm">
-                        {isSending ? '전송 중...' : '발송 및 완료 처리 🚀'}
-                      </button>
+
+                      {/* 버튼 영역 (보류 버튼 추가) */}
+                      <div className="flex gap-2">
+                        <button onClick={handleHold} disabled={isSending} className="flex-1 bg-gray-400 text-white p-3 rounded-xl font-bold hover:bg-gray-500 transition shadow-md text-sm">
+                          {isSending ? '처리 중...' : '답변 보류 (L)'}
+                        </button>
+                        <button onClick={handleSendEmail} disabled={isSending} className="flex-[2] bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200 text-sm">
+                          {isSending ? '전송 중...' : '발송 및 완료 처리 🚀'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </section>
