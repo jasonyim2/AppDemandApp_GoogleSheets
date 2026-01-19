@@ -30,8 +30,8 @@ export default function AdminDashboard() {
   const [participantsPage, setParticipantsPage] = useState(1);
 
   // 🔍 [필터] 홈 및 피드백 탭용 필터 상태
-  const [homeFilter, setHomeFilter] = useState<'all' | 'completed' | 'pending'>('all');
-  const [feedbackFilter, setFeedbackFilter] = useState<'all' | 'completed' | 'pending'>('all');
+  const [homeFilter, setHomeFilter] = useState<'all' | 'completed' | 'pending' | 'hold'>('all');
+  const [feedbackFilter, setFeedbackFilter] = useState<'all' | 'completed' | 'pending' | 'hold'>('all');
 
   // 📏 [상수] 페이지당 항목 수
   const ITEMS_PER_PAGE_HOME = 10;
@@ -281,21 +281,29 @@ export default function AdminDashboard() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-xl ml-1 text-gray-900">최근 현황</h3>
-                {/* ★ 홈 탭 필터 버튼 복구 ★ */}
+                {/* ★ 홈 탭 필터 버튼 복구 및 보류 추가 ★ */}
                 <div className="flex bg-gray-200/50 p-1 rounded-lg">
                   <button onClick={() => { setHomeFilter('all'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>전체</button>
                   <button onClick={() => { setHomeFilter('completed'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'completed' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'}`}>완료</button>
                   <button onClick={() => { setHomeFilter('pending'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'pending' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'}`}>대기</button>
+                  <button onClick={() => { setHomeFilter('hold'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'hold' ? 'bg-white text-gray-600 shadow-sm' : 'text-gray-500'}`}>보류</button>
                 </div>
               </div>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 {(() => {
                   const filteredData = data.filter(item => {
+                    const isHold = item.reply_status === 'L';
+                    // 보류 필터일 때만 보류 항목 표시
+                    if (homeFilter === 'hold') return isHold;
+
+                    // 그 외(전체, 완료, 대기)에서는 보류 항목 제외
+                    if (isHold) return false;
+
                     const isCompleted = item.reply_status === 'Y' || (item.admin_reply_memo && item.reply_status !== 'L');
                     if (homeFilter === 'completed') return isCompleted;
-                    if (homeFilter === 'pending') return !isCompleted && item.reply_status !== 'L'; // 보류는 대기에서 제외? 혹은 포함? (일단 보류는 별도 취급하거나 완료 취급 X)
-                    // 현재 필터가 단순해서 보류는 '전체'에서만 보일 수도 있음.
-                    return true;
+                    if (homeFilter === 'pending') return !isCompleted;
+
+                    return true; // 'all' (단, 보류는 이미 위에서 제외됨)
                   });
                   const paginatedData = filteredData.slice((homePage - 1) * ITEMS_PER_PAGE_HOME, homePage * ITEMS_PER_PAGE_HOME);
 
@@ -338,14 +346,23 @@ export default function AdminDashboard() {
                     <button onClick={() => { setFeedbackFilter('all'); setFeedbackPage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${feedbackFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>전체</button>
                     <button onClick={() => { setFeedbackFilter('completed'); setFeedbackPage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${feedbackFilter === 'completed' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'}`}>완료</button>
                     <button onClick={() => { setFeedbackFilter('pending'); setFeedbackPage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${feedbackFilter === 'pending' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'}`}>대기</button>
+                    <button onClick={() => { setFeedbackFilter('hold'); setFeedbackPage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${feedbackFilter === 'hold' ? 'bg-white text-gray-600 shadow-sm' : 'text-gray-500'}`}>보류</button>
                   </div>
                 </div>
 
                 {(() => {
                   const filteredFeedback = data.filter(item => {
+                    const isHold = item.reply_status === 'L';
+                    // 보류 필터일 때만 보류 항목 표시
+                    if (feedbackFilter === 'hold') return isHold;
+
+                    // 그 외(전체, 완료, 대기)에서는 보류 항목 제외
+                    if (isHold) return false;
+
                     const isCompleted = item.reply_status === 'Y' || (item.admin_reply_memo && item.reply_status !== 'L');
                     if (feedbackFilter === 'completed') return isCompleted;
-                    if (feedbackFilter === 'pending') return !isCompleted && item.reply_status !== 'L';
+                    if (feedbackFilter === 'pending') return !isCompleted;
+
                     return true;
                   });
                   const paginatedFeedback = filteredFeedback.slice((feedbackPage - 1) * ITEMS_PER_PAGE_FEEDBACK, feedbackPage * ITEMS_PER_PAGE_FEEDBACK);
