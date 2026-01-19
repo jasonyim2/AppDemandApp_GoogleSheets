@@ -737,7 +737,11 @@ export default function AdminDashboard() {
                           <p className="text-sm text-gray-600 mb-3 line-clamp-2">{historyItem.pain_point}</p>
 
                           {/* 답변 상태 표시 */}
-                          {historyItem.admin_reply_memo ? (
+                          {historyItem.reply_status === 'L' ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 text-gray-500 text-xs font-medium border border-gray-100">
+                              <span>⏸️ 답변 보류</span>
+                            </div>
+                          ) : historyItem.admin_reply_memo ? (
                             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 text-xs font-medium border border-green-100">
                               <span>✅ 답변 완료</span>
                             </div>
