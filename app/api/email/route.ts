@@ -37,14 +37,15 @@ export async function POST(request: Request) {
 
     if (id && SHEET_ID && CLIENT_EMAIL && PRIVATE_KEY) {
       try {
-        // 인증 (Service Account)
-        const auth = new google.auth.JWT(
-          CLIENT_EMAIL,
-          undefined,
-          PRIVATE_KEY,
-          ['https://www.googleapis.com/auth/spreadsheets']
-        );
-        await auth.authorize();
+        // 인증 (GoogleAuth 사용 - 권장 방식)
+        const auth = new google.auth.GoogleAuth({
+          credentials: {
+            client_email: CLIENT_EMAIL,
+            private_key: PRIVATE_KEY,
+          },
+          scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+
         const sheets = google.sheets({ version: 'v4', auth });
 
         // ID로 행(Row) 찾기 (A열 검색)
@@ -54,8 +55,15 @@ export async function POST(request: Request) {
         });
 
         const rows = readRes.data.values;
-        // id와 일치하는 행 찾기 (헤더 제외, rows[0]은 1행)
-        const rowIndex = rows?.findIndex((row) => row[0] === id);
+
+        // [디버깅] ID 매칭 확인을 위한 로그 (Vercel 로그에서 확인 가능)
+        console.log(`[API Debug] Searching for ID: "${id}"`);
+        if (rows && rows.length > 0) {
+          console.log(`[API Debug] First 3 IDs in Sheet: ${JSON.stringify(rows.slice(0, 3))}`);
+        }
+
+        // id와 일치하는 행 찾기 (문자열 변환 및 공백 제거 후 비교)
+        const rowIndex = rows?.findIndex((row) => String(row[0] || '').trim() === String(id).trim());
 
         if (rowIndex !== undefined && rowIndex !== -1) {
           const realRowNumber = rowIndex + 1; // 1-based index
