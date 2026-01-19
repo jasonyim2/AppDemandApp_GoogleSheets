@@ -74,6 +74,9 @@ export default function AdminDashboard() {
           admin_reply_memo: row[21] || null // V열: 답변내용
         }));
 
+        // 날짜 내림차순 정렬 (최신순)
+        mappedData.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
         setData(mappedData);
       }
     } catch (err) {
@@ -175,7 +178,7 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-3xl mx-auto p-6">
-        {/* 홈 탭 UI 로직 (영주님 원본 코드 유지) */}
+        {/* 홈 탭 UI 로직 (영주님 원본 코드 유지 + 필터 복구) */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8 animate-fade-in">
             <div className="grid grid-cols-3 gap-4">
@@ -196,18 +199,45 @@ export default function AdminDashboard() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-bold text-xl ml-1 text-gray-900">최근 현황</h3>
+                {/* ★ 홈 탭 필터 버튼 복구 ★ */}
+                <div className="flex bg-gray-200/50 p-1 rounded-lg">
+                  <button onClick={() => { setHomeFilter('all'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>전체</button>
+                  <button onClick={() => { setHomeFilter('completed'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'completed' ? 'bg-white text-green-700 shadow-sm' : 'text-gray-500'}`}>완료</button>
+                  <button onClick={() => { setHomeFilter('pending'); setHomePage(1); }} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${homeFilter === 'pending' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500'}`}>대기</button>
+                </div>
               </div>
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                {data.slice((homePage - 1) * ITEMS_PER_PAGE_HOME, homePage * ITEMS_PER_PAGE_HOME).map((item) => (
-                  <div key={item.id} onClick={() => setViewDetailItem(item)} className="p-5 flex justify-between items-center group cursor-pointer hover:bg-gray-50 border-b last:border-0">
-                    <div className="flex-1 min-w-0 pr-4">
-                      <p className="font-semibold text-gray-900 truncate">{item.app_title || '제목 없음'}</p>
-                      <p className="text-sm text-gray-500">{item.respondent_name} · {item.created_at}</p>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-gray-300" />
-                  </div>
-                ))}
-                <PaginationControl currentPage={homePage} totalItems={data.length} itemsPerPage={ITEMS_PER_PAGE_HOME} onPageChange={setHomePage} />
+                {(() => {
+                  const filteredData = data.filter(item => {
+                    if (homeFilter === 'completed') return item.admin_reply_memo;
+                    if (homeFilter === 'pending') return !item.admin_reply_memo;
+                    return true;
+                  });
+                  const paginatedData = filteredData.slice((homePage - 1) * ITEMS_PER_PAGE_HOME, homePage * ITEMS_PER_PAGE_HOME);
+
+                  return (
+                    <>
+                      {paginatedData.map((item) => (
+                        <div key={item.id} onClick={() => setViewDetailItem(item)} className="p-5 flex justify-between items-center group cursor-pointer hover:bg-gray-50 border-b last:border-0 transition-colors">
+                          <div className="flex-1 min-w-0 pr-4">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-semibold text-gray-900 truncate">{item.app_title || '제목 없음'}</p>
+                              {item.admin_reply_memo && <span className="w-2 h-2 rounded-full bg-green-500"></span>}
+                            </div>
+                            <p className="text-sm text-gray-500">{item.respondent_name} · {item.created_at}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.admin_reply_memo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                              {item.admin_reply_memo ? '답변완료' : '대기중'}
+                            </span>
+                            <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-400" />
+                          </div>
+                        </div>
+                      ))}
+                      <PaginationControl currentPage={homePage} totalItems={filteredData.length} itemsPerPage={ITEMS_PER_PAGE_HOME} onPageChange={setHomePage} />
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -264,7 +294,7 @@ export default function AdminDashboard() {
             ) : (
               // 피드백 상세 보기 화면
               <div className="bg-white p-6 rounded-2xl border shadow-sm">
-                <button onClick={() => setSelectedItem(null)} className="mb-6 flex items-center text-sm text-gray-500 hover:text-gray-900 font-medium">← 목록으로 돌아가기</button>
+                <button onClick={() => setSelectedItem(null)} className="mb-6 flex items-center text-sm text-blue-600 hover:text-blue-700 font-bold">← 목록으로 돌아가기</button>
 
                 {/* 1. 기본 정보 */}
                 <section className="mb-8">
