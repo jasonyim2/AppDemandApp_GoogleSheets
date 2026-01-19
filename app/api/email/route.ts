@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 
 export async function POST(request: Request) {
   try {
-    const { to, subject, text } = await request.json();
+    const { id, to, subject, text } = await request.json();
 
-    // 환경 변수 로딩 확인 (디버깅용)
+    // 1. 이메일 전송 (Nodemailer)
     if (!process.env.GMAIL_USER || !process.env.GMAIL_PASS) {
       console.error('환경 변수(GMAIL_USER, GMAIL_PASS)가 없습니다!');
-      return NextResponse.json({ success: false, message: '서버 설정 오류' }, { status: 500 });
+      return NextResponse.json({ success: false, message: '서버 설정 오류 (Email)' }, { status: 500 });
     }
 
     const transporter = nodemailer.createTransport({
@@ -28,10 +29,73 @@ export async function POST(request: Request) {
 
     await transporter.sendMail(mailOptions);
 
+    // 2. 구글 시트 업데이트 (Google Sheets API)
+    // 환경변수 확인
+    const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+    const CLIENT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+    const PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'); // 개행문자 처리
+
+    if (id && SHEET_ID && CLIENT_EMAIL && PRIVATE_KEY) {
+      try {
+        // 인증 (Service Account)
+        const auth = new google.auth.JWT(
+          CLIENT_EMAIL,
+          undefined,
+          PRIVATE_KEY,
+          ['https://www.googleapis.com/auth/spreadsheets']
+        );
+        await auth.authorize();
+        const sheets = google.sheets({ version: 'v4', auth });
+
+        // ID로 행(Row) 찾기 (A열 검색)
+        const readRes = await sheets.spreadsheets.values.get({
+          spreadsheetId: SHEET_ID,
+          range: 'Tally_raw!A:A',
+        });
+
+        const rows = readRes.data.values;
+        // id와 일치하는 행 찾기 (헤더 제외, rows[0]은 1행)
+        const rowIndex = rows?.findIndex((row) => row[0] === id);
+
+        if (rowIndex !== undefined && rowIndex !== -1) {
+          const realRowNumber = rowIndex + 1; // 1-based index
+
+          // 기존 댓글(메모) 가져오기 (V열)
+          const memoRes = await sheets.spreadsheets.values.get({
+            spreadsheetId: SHEET_ID,
+            range: `Tally_raw!V${realRowNumber}`,
+          });
+          const oldMemo = memoRes.data.values?.[0]?.[0] || '';
+
+          // 새 메모 포맷팅 (기존 메모 하단에 추가)
+          const nowStr = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+          const newFullMemo = `[${nowStr} 발송] ${subject}\n${text}\n----------------\n${oldMemo}`;
+
+          // V(답변내용), W(답변상태), X(답변일시) 업데이트
+          await sheets.spreadsheets.values.update({
+            spreadsheetId: SHEET_ID,
+            range: `Tally_raw!V${realRowNumber}:X${realRowNumber}`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: {
+              values: [[newFullMemo, 'Y', nowStr]],
+            },
+          });
+          console.log(`Google Sheet Updated for ID: ${id} at Row: ${realRowNumber}`);
+        } else {
+          console.warn(`ID not found in Sheet: ${id}`);
+        }
+      } catch (sheetError) {
+        console.error('Google Sheet Update Error:', sheetError);
+        // 이메일은 성공했으므로 여기서 에러를 던져서 실패 처리하지 않고, 로그만 남김 (또는 클라이언트에 경고 전달)
+      }
+    } else {
+      console.warn('Google Sheet Env Vars missing or ID not provided. Skipping Sheet Update.');
+    }
+
     return NextResponse.json({ success: true, message: '전송 성공' });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('이메일 전송 상세 에러:', error);
-    return NextResponse.json({ success: false, message: '전송 실패' }, { status: 500 });
+    return NextResponse.json({ success: false, message: '전송 실패: ' + error.message }, { status: 500 });
   }
 }

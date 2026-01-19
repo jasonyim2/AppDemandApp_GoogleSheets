@@ -21,6 +21,8 @@ export default function AdminDashboard() {
 
   // 👥 [정렬/검색] 참가자 탭용
   const [viewParticipant, setViewParticipant] = useState<any>(null);
+  const [sortBy, setSortBy] = useState<'name' | 'recent'>('recent');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   // 📄 [페이지네이션] 탭별 현재 페이지
   const [homePage, setHomePage] = useState(1);
@@ -112,6 +114,7 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: targetItem.id, // ID 추가 (구글 시트 업데이트용)
           to: targetItem.respondent_email,
           subject: replySubject,
           text: replyBody
@@ -119,19 +122,37 @@ export default function AdminDashboard() {
       });
       const result = await res.json();
       if (result.success) {
-        alert("성공! 이메일이 발송되었습니다.\n(참고: 시트에는 직접 기록해 주세요!)");
+        alert("성공! 이메일이 발송되었습니다.\n(참고: 시트 업데이트는 잠시 후 반영될 수 있습니다.)");
         setReplyBody("");
-        setSelectedItem(null);
-        setViewDetailItem(null);
+
+        // 로컬 상태 즉시 업데이트 (사용자 경험 향상)
+        const newMemo = `[${new Date().toLocaleDateString()} 발송] ${replySubject}\n${replyBody}\n----------------\n${targetItem.admin_reply_memo || ''}`;
+        const updatedItem = { ...targetItem, admin_reply_memo: newMemo };
+
+        // 데이터 목록 업데이트
+        setData(prev => prev.map(item => item.id === targetItem.id ? updatedItem : item));
+        if (selectedItem?.id === targetItem.id) setSelectedItem(updatedItem);
+        if (viewDetailItem?.id === targetItem.id) setViewDetailItem(updatedItem);
+
+        // setViewDetailItem(null); // (선택사항: 완료 후 닫기)
+      } else {
+        alert("메일 발송 실패: " + result.message);
       }
     } catch (err) {
-      alert("오류 발생");
+      alert("오류 발생: " + err);
     } finally {
       setIsSending(false);
     }
   };
 
-  // 📄 [컴포넌트] 공용 페이지네이션 컨트롤 (영주님의 기존 디자인)
+  // 📅 [유틸] 날짜 포맷팅
+  const getNiceDate = (dateStr: string) => {
+    if (!dateStr) return '-';
+    // 간단히 날짜 부분만 반환 (또는 원하는 포맷으로 수정 가능)
+    return dateStr.split(' ')[0];
+  };
+
+  // 📄 [컴포넌트] 공용 페이지네이션 컨트롤
   const PaginationControl = ({ currentPage, totalItems, itemsPerPage, onPageChange }: any) => {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
     if (totalPages <= 1) return null;
@@ -192,7 +213,7 @@ export default function AdminDashboard() {
               </div>
               <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <h3 className="text-sm font-medium text-gray-500 mb-1">최근 접수</h3>
-                <p className="text-2xl font-bold text-blue-600">{data.length > 0 ? data[0].created_at.split(' ')[0] : '-'}</p>
+                <p className="text-2xl font-bold text-blue-600">{data.length > 0 ? getNiceDate(data[0].created_at) : '-'}</p>
               </div>
             </div>
 
@@ -418,199 +439,233 @@ export default function AdminDashboard() {
         )}
 
         {/* 3️⃣ 참가자 목록 탭 */}
-        {activeTab === 'participants' && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-fade-in">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6 ml-1 flex items-center gap-2">👥 참가자 목록</h2>
-            <div className="flex items-center bg-gray-100 p-3 rounded-xl mb-6 border border-transparent focus-within:border-blue-400 focus-within:bg-white transition-all">
-              <Search className="w-5 h-5 text-gray-400 mr-2" />
-              <input type="text" placeholder="이름, 이메일 검색..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setParticipantsPage(1); }} className="bg-transparent outline-none w-full text-gray-900 font-sans" />
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left font-sans">
-                <thead className="bg-[#FAFAFA] text-gray-500 font-medium border-b">
-                  <tr><th className="p-4">이름</th><th className="p-4">이메일</th><th className="p-4">연락처</th></tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50 text-black">
-                  {(() => {
-                    const filteredUsers = data.filter(i =>
-                      i.respondent_name?.includes(searchTerm) ||
-                      i.respondent_email?.includes(searchTerm)
-                    );
-                    const paginatedUsers = filteredUsers.slice((participantsPage - 1) * ITEMS_PER_PAGE_PARTICIPANTS, participantsPage * ITEMS_PER_PAGE_PARTICIPANTS);
+        {
+          activeTab === 'participants' && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 animate-fade-in">
+              <div className="flex justify-between items-center mb-6 ml-1">
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">👥 참가자 목록</h2>
+                {/* 정렬 버튼 */}
+                <div className="flex gap-2">
+                  <button onClick={() => { setSortBy('name'); setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} className={`text-xs px-3 py-1.5 rounded-lg border transition ${sortBy === 'name' ? 'bg-blue-50 border-blue-200 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
+                    이름순 {sortBy === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </button>
+                  <button onClick={() => { setSortBy('recent'); setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc'); }} className={`text-xs px-3 py-1.5 rounded-lg border transition ${sortBy === 'recent' ? 'bg-blue-50 border-blue-200 text-blue-600 font-bold' : 'bg-white border-gray-200 text-gray-500'}`}>
+                    최신순 {sortBy === 'recent' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </button>
+                </div>
+              </div>
 
-                    return (
-                      <>
-                        {paginatedUsers.map(item => (
-                          <tr key={item.id} onClick={() => setViewParticipant(item)} className="hover:bg-gray-50 transition-colors cursor-pointer border-b last:border-0">
-                            <td className="p-4 font-bold text-gray-800">{item.respondent_name}</td>
-                            <td className="p-4 text-gray-600">{item.respondent_email}</td>
-                            <td className="p-4 text-gray-500">{item.respondent_phone || '-'}</td>
-                          </tr>
-                        ))}
-                        {filteredUsers.length === 0 && (
-                          <tr><td colSpan={3} className="p-10 text-center text-gray-400">검색 결과가 없습니다.</td></tr>
-                        )}
-                      </>
-                    );
-                  })()}
-                </tbody>
-              </table>
-              {(() => {
-                const filteredUsers = data.filter(i => i.respondent_name?.includes(searchTerm) || i.respondent_email?.includes(searchTerm));
-                return <PaginationControl currentPage={participantsPage} totalItems={filteredUsers.length} itemsPerPage={ITEMS_PER_PAGE_PARTICIPANTS} onPageChange={setParticipantsPage} />;
-              })()}
+              <div className="flex items-center bg-gray-100 p-3 rounded-xl mb-6 border border-transparent focus-within:border-blue-400 focus-within:bg-white transition-all">
+                <Search className="w-5 h-5 text-gray-400 mr-2" />
+                <input type="text" placeholder="이름, 이메일 검색..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setParticipantsPage(1); }} className="bg-transparent outline-none w-full text-gray-900 font-sans" />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left font-sans">
+                  <thead className="bg-[#FAFAFA] text-gray-500 font-medium border-b">
+                    <tr><th className="p-4">이름</th><th className="p-4">이메일</th><th className="p-4">연락처</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50 text-black">
+                    {(() => {
+                      // 필터링 + 정렬 로직 적용
+                      const filteredUsers = data
+                        .filter(i => i.respondent_name?.includes(searchTerm) || i.respondent_email?.includes(searchTerm))
+                        .sort((a, b) => {
+                          if (sortBy === 'name') {
+                            return sortOrder === 'asc'
+                              ? a.respondent_name.localeCompare(b.respondent_name)
+                              : b.respondent_name.localeCompare(a.respondent_name);
+                          } else {
+                            // recent
+                            return sortOrder === 'asc'
+                              ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                              : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                          }
+                        });
+
+                      const paginatedUsers = filteredUsers.slice((participantsPage - 1) * ITEMS_PER_PAGE_PARTICIPANTS, participantsPage * ITEMS_PER_PAGE_PARTICIPANTS);
+
+                      return (
+                        <>
+                          {paginatedUsers.map(item => (
+                            <tr key={item.id} onClick={() => setViewParticipant(item)} className="hover:bg-gray-50 transition-colors cursor-pointer border-b last:border-0">
+                              <td className="p-4 font-bold text-gray-800">{item.respondent_name}</td>
+                              <td className="p-4 text-gray-600">{item.respondent_email}</td>
+                              <td className="p-4 text-gray-500">{item.respondent_phone || '-'}</td>
+                            </tr>
+                          ))}
+                          {filteredUsers.length === 0 && (
+                            <tr><td colSpan={3} className="p-10 text-center text-gray-400">검색 결과가 없습니다.</td></tr>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+                {(() => {
+                  const filteredUsers = data.filter(i => i.respondent_name?.includes(searchTerm) || i.respondent_email?.includes(searchTerm));
+                  return <PaginationControl currentPage={participantsPage} totalItems={filteredUsers.length} itemsPerPage={ITEMS_PER_PAGE_PARTICIPANTS} onPageChange={setParticipantsPage} />;
+                })()}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* 4️⃣ 등록 (Tally) */}
-        {activeTab === 'input' && (
-          <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center py-24 animate-fade-in text-black">
-            <h2 className="text-2xl font-bold mb-4 font-sans">📝 설문 등록 페이지</h2>
-            <p className="text-gray-500 mb-8 px-10 font-sans leading-relaxed">새로운 앱 수요를 등록하시려면<br />아래 버튼을 눌러 Tally 설문지로 이동하세요.</p>
-            <a href="https://tally.so/r/zxMZg8" target="_blank" rel="noreferrer" className="inline-block bg-black text-white px-8 py-4 rounded-xl font-bold hover:bg-gray-800 transition shadow-lg font-sans">설문 작성하러 가기 →</a>
-          </div>
-        )}
-      </main>
+        {
+          activeTab === 'input' && (
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 text-center py-24 animate-fade-in text-black">
+              <h2 className="text-2xl font-bold mb-4 font-sans">📝 설문 등록 페이지</h2>
+              <p className="text-gray-500 mb-8 px-10 font-sans leading-relaxed">새로운 앱 수요를 등록하시려면<br />아래 버튼을 눌러 Tally 설문지로 이동하세요.</p>
+              <a href="https://tally.so/r/zxMZg8" target="_blank" rel="noreferrer" className="inline-block bg-black text-white px-8 py-4 rounded-xl font-bold hover:bg-gray-800 transition shadow-lg font-sans">설문 작성하러 가기 →</a>
+            </div>
+          )
+        }
+      </main >
 
       {/* 하단 탭바 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-gray-200 pb-safe pt-2 px-6 flex justify-between items-center z-40 h-[84px]">
-        {[
-          { id: 'dashboard', icon: Home, label: '홈' },
-          { id: 'feedback', icon: MessageSquare, label: '피드백' },
-          { id: 'participants', icon: Users, label: '참가자' },
-          { id: 'input', icon: PlusCircle, label: '등록' },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedItem(null); setViewDetailItem(null); }} className={`flex flex-col items-center justify-center gap-1.5 w-1/4 h-full transition-all ${activeTab === tab.id ? 'text-black' : 'text-gray-400'}`}>
-            <tab.icon className={`w-6 h-6 ${activeTab === tab.id ? 'stroke-[2.5px]' : 'stroke-2'}`} />
-            <span className="text-[11px] font-bold">{tab.label}</span>
-          </button>
-        ))}
-      </nav>
+      < nav className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-gray-200 pb-safe pt-2 px-6 flex justify-between items-center z-40 h-[84px]" >
+        {
+          [
+            { id: 'dashboard', icon: Home, label: '홈' },
+            { id: 'feedback', icon: MessageSquare, label: '피드백' },
+            { id: 'participants', icon: Users, label: '참가자' },
+            { id: 'input', icon: PlusCircle, label: '등록' },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSelectedItem(null); setViewDetailItem(null); }} className={`flex flex-col items-center justify-center gap-1.5 w-1/4 h-full transition-all ${activeTab === tab.id ? 'text-black' : 'text-gray-400'}`}>
+              <tab.icon className={`w-6 h-6 ${activeTab === tab.id ? 'stroke-[2.5px]' : 'stroke-2'}`} />
+              <span className="text-[11px] font-bold">{tab.label}</span>
+            </button>
+          ))
+        }
+      </nav >
 
       {/* 상세보기 모달 (홈 탭용) */}
-      {viewDetailItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewDetailItem(null)}></div>
-          <div className="relative bg-white w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-3xl shadow-2xl p-8 animate-fade-in text-black">
-            <div className="flex justify-between items-start mb-6 border-b pb-4">
-              <div>
-                <h3 className="text-2xl font-bold text-gray-900 font-sans">{viewDetailItem.app_title || '상세 보기'}</h3>
-                <p className="text-sm text-gray-500 font-sans">{viewDetailItem.respondent_name}님의 제안</p>
+      {
+        viewDetailItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setViewDetailItem(null)}></div>
+            <div className="relative bg-white w-full max-w-lg max-h-[80vh] overflow-y-auto rounded-3xl shadow-2xl p-8 animate-fade-in text-black">
+              <div className="flex justify-between items-start mb-6 border-b pb-4">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900 font-sans">{viewDetailItem.app_title || '상세 보기'}</h3>
+                  <p className="text-sm text-gray-500 font-sans">{viewDetailItem.respondent_name}님의 제안</p>
+                </div>
+                <button onClick={() => setViewDetailItem(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><X className="w-5 h-5 text-gray-500" /></button>
               </div>
-              <button onClick={() => setViewDetailItem(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition"><X className="w-5 h-5 text-gray-500" /></button>
-            </div>
-            <div className="space-y-6 text-sm font-sans">
-              <div><p className="font-bold text-gray-400 text-xs uppercase mb-2">Pain Point</p><div className="bg-gray-50 p-4 rounded-xl leading-relaxed whitespace-pre-wrap border">{viewDetailItem.pain_point}</div></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-gray-50 rounded border"><p className="text-xs text-gray-400 mb-1">이메일</p><p className="font-medium truncate">{viewDetailItem.respondent_email}</p></div>
-                <div className="p-3 bg-gray-50 rounded border"><p className="text-xs text-gray-400 mb-1">연락처</p><p className="font-medium">{viewDetailItem.respondent_phone || '-'}</p></div>
+              <div className="space-y-6 text-sm font-sans">
+                <div><p className="font-bold text-gray-400 text-xs uppercase mb-2">Pain Point</p><div className="bg-gray-50 p-4 rounded-xl leading-relaxed whitespace-pre-wrap border">{viewDetailItem.pain_point}</div></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 bg-gray-50 rounded border"><p className="text-xs text-gray-400 mb-1">이메일</p><p className="font-medium truncate">{viewDetailItem.respondent_email}</p></div>
+                  <div className="p-3 bg-gray-50 rounded border"><p className="text-xs text-gray-400 mb-1">연락처</p><p className="font-medium">{viewDetailItem.respondent_phone || '-'}</p></div>
+                </div>
+                {viewDetailItem.admin_reply_memo && (
+                  <div className="bg-green-50 p-4 rounded-xl border border-green-100"><p className="font-bold text-green-700 mb-1">✅ 관리자 피드백 완료</p><p className="text-green-800 line-clamp-3 leading-relaxed">{viewDetailItem.admin_reply_memo}</p></div>
+                )}
               </div>
-              {viewDetailItem.admin_reply_memo && (
-                <div className="bg-green-50 p-4 rounded-xl border border-green-100"><p className="font-bold text-green-700 mb-1">✅ 관리자 피드백 완료</p><p className="text-green-800 line-clamp-3 leading-relaxed">{viewDetailItem.admin_reply_memo}</p></div>
-              )}
+              <button onClick={() => { setViewDetailItem(null); setActiveTab('feedback'); setSelectedItem(viewDetailItem); setReplySubject(`[답변] ${viewDetailItem.app_title} 피드백`); }} className="w-full mt-8 bg-black text-white py-4 rounded-xl font-bold shadow-lg transition-transform active:scale-95 font-sans">피드백 작성하러 가기</button>
             </div>
-            <button onClick={() => { setViewDetailItem(null); setActiveTab('feedback'); setSelectedItem(viewDetailItem); setReplySubject(`[답변] ${viewDetailItem.app_title} 피드백`); }} className="w-full mt-8 bg-black text-white py-4 rounded-xl font-bold shadow-lg transition-transform active:scale-95 font-sans">피드백 작성하러 가기</button>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* 🟢 참가자 상세 모달 */}
-      {viewParticipant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 fade-in-modal">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setViewParticipant(null)}></div>
-          <div className="relative bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-scale-in">
-            {/* 모달 헤더 */}
-            <div className="sticky top-0 bg-white/95 backdrop-blur border-b z-10 px-6 py-4 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-gray-900 truncate pr-4">{viewParticipant.respondent_name}님의 활동 내역</h3>
-              <button onClick={() => setViewParticipant(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition">
-                <X className="w-5 h-5 text-gray-600" />
-              </button>
-            </div>
+      {
+        viewParticipant && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 fade-in-modal">
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setViewParticipant(null)}></div>
+            <div className="relative bg-white w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl shadow-2xl animate-scale-in">
+              {/* 모달 헤더 */}
+              <div className="sticky top-0 bg-white/95 backdrop-blur border-b z-10 px-6 py-4 flex justify-between items-center">
+                <h3 className="font-bold text-lg text-gray-900 truncate pr-4">{viewParticipant.respondent_name}님의 활동 내역</h3>
+                <button onClick={() => setViewParticipant(null)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition">
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
 
-            <div className="p-6 space-y-8">
-              {/* 1. 기본 정보 (최신 기준) */}
-              <section>
-                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">참가자 프로필</h4>
-                <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
-                  <div>
-                    <span className="block text-gray-500 mb-1">이름</span>
-                    <span className="font-medium text-gray-900">{viewParticipant.respondent_name || '-'}</span>
+              <div className="p-6 space-y-8">
+                {/* 1. 기본 정보 (최신 기준) */}
+                <section>
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">참가자 프로필</h4>
+                  <div className="grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                    <div>
+                      <span className="block text-gray-500 mb-1">이름</span>
+                      <span className="font-medium text-gray-900">{viewParticipant.respondent_name || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 mb-1">나이대</span>
+                      <span className="font-medium text-gray-900">{viewParticipant.age_group || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 mb-1">이메일</span>
+                      <span className="font-medium text-gray-900">{viewParticipant.respondent_email || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 mb-1">연락처</span>
+                      <span className="font-medium text-gray-900">{viewParticipant.respondent_phone || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 mb-1">IT 지식 수준</span>
+                      <span className="font-medium text-gray-900">{viewParticipant.it_knowledge || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-gray-500 mb-1">직업 상태</span>
+                      <span className="font-medium text-gray-900">{viewParticipant.job_status || '-'}</span>
+                    </div>
                   </div>
-                  <div>
-                    <span className="block text-gray-500 mb-1">나이대</span>
-                    <span className="font-medium text-gray-900">{viewParticipant.age_group || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="block text-gray-500 mb-1">이메일</span>
-                    <span className="font-medium text-gray-900">{viewParticipant.respondent_email || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="block text-gray-500 mb-1">연락처</span>
-                    <span className="font-medium text-gray-900">{viewParticipant.respondent_phone || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="block text-gray-500 mb-1">IT 지식 수준</span>
-                    <span className="font-medium text-gray-900">{viewParticipant.it_knowledge || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="block text-gray-500 mb-1">직업 상태</span>
-                    <span className="font-medium text-gray-900">{viewParticipant.job_status || '-'}</span>
-                  </div>
-                </div>
-              </section>
+                </section>
 
-              <div className="h-px bg-gray-100"></div>
+                <div className="h-px bg-gray-100"></div>
 
-              {/* 2. 히스토리 리스트 */}
-              <section>
-                <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">제출한 아이디어 목록 ({data.filter(d => d.respondent_email === viewParticipant.respondent_email && d.respondent_name === viewParticipant.respondent_name).length}건)</h4>
-                <div className="space-y-4">
-                  {data
-                    .filter(d => d.respondent_email === viewParticipant.respondent_email && d.respondent_name === viewParticipant.respondent_name)
-                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) // 최신순 정렬
-                    .map(historyItem => (
-                      <div
-                        key={historyItem.id}
-                        onClick={() => {
-                          setViewParticipant(null);
-                          setActiveTab('feedback');
-                          setSelectedItem(historyItem);
-                          setReplySubject(`[답변] ${historyItem.app_title} 관련 피드백입니다.`);
-                        }}
-                        className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:border-blue-300 transition group cursor-pointer"
-                      >
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="font-bold text-base text-gray-900">{historyItem.app_title || '제목 없음'}</h3>
-                          <span className="text-xs text-gray-400">{historyItem.created_at}</span>
+                {/* 2. 히스토리 리스트 */}
+                <section>
+                  <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">제출한 아이디어 목록 ({data.filter(d => d.respondent_email === viewParticipant.respondent_email && d.respondent_name === viewParticipant.respondent_name).length}건)</h4>
+                  <div className="space-y-4">
+                    {data
+                      .filter(d => d.respondent_email === viewParticipant.respondent_email && d.respondent_name === viewParticipant.respondent_name)
+                      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) // 최신순 정렬
+                      .map(historyItem => (
+                        <div
+                          key={historyItem.id}
+                          onClick={() => {
+                            setViewParticipant(null);
+                            setActiveTab('feedback');
+                            setSelectedItem(historyItem);
+                            setReplySubject(`[답변] ${historyItem.app_title} 관련 피드백입니다.`);
+                          }}
+                          className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:border-blue-300 transition group cursor-pointer"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-bold text-base text-gray-900">{historyItem.app_title || '제목 없음'}</h3>
+                            <span className="text-xs text-gray-400">{historyItem.created_at}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-3 line-clamp-2">{historyItem.pain_point}</p>
+
+                          {/* 답변 상태 표시 */}
+                          {historyItem.admin_reply_memo ? (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 text-xs font-medium border border-green-100">
+                              <span>✅ 답변 완료</span>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 text-xs font-medium border border-orange-100">
+                              <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> 답변 대기중
+                            </div>
+                          )}
                         </div>
-                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{historyItem.pain_point}</p>
+                      ))
+                    }
+                  </div>
+                </section>
+              </div>
 
-                        {/* 답변 상태 표시 */}
-                        {historyItem.admin_reply_memo ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 text-green-700 text-xs font-medium border border-green-100">
-                            <span>✅ 답변 완료</span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-orange-600 text-xs font-medium border border-orange-100">
-                            <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span> 답변 대기중
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  }
-                </div>
-              </section>
-            </div>
-
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
-              <button onClick={() => setViewParticipant(null)} className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50 transition">
-                닫기
-              </button>
+              <div className="p-4 border-t bg-gray-50 flex justify-end">
+                <button onClick={() => setViewParticipant(null)} className="px-6 py-2 bg-white border border-gray-300 rounded-lg text-sm font-bold hover:bg-gray-50 transition">
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       <style jsx global>{`
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -620,6 +675,6 @@ export default function AdminDashboard() {
         .fade-in-modal { animation: fadeIn 0.2s ease-out forwards; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
       `}</style>
-    </div>
+    </div >
   );
 }
